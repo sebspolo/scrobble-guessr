@@ -164,10 +164,7 @@ export default function Home() {
       const Y = item;
       const Z = pick.tf;
 
-      const choices = [...usernames];
-      for (let s = choices.length - 1; s > 0; s--) {
-        const r = Math.floor(Math.random() * (s + 1));
-        [choices[s], choices[r]] = [choices[r], choices[s]];
+      const choices = [...usernames]; // keep original order, no shuffle
       }
 
       qs.push({ user: pick.user, category: pick.category, timeframe: Z, item: Y, scrobbles: X, choices });
