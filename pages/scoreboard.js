@@ -70,6 +70,28 @@ async function getArtistUserPlaycount(username, artist) {
 }
 
 async function getArtistTracksTotal(username, artist, start, end) {
+  // Some Last.fm stacks expect `from`/`to` instead of startTimestamp/endTimestamp.
+  const url = lfUrl('user.getArtistTracks', {
+    user: username,
+    artist,
+    from: start,          // <-- use from/to (UNIX seconds, UTC)
+    to: end,
+    limit: 1,             // we only need the total
+    page: 1,
+  });
+  const json = await lfFetchJson(url);
+
+  // Preferred: total across all pages
+  let total = Number(json?.artisttracks?.['@attr']?.total);
+
+  // Fallback: sometimes `total` isn’t present; count what we got
+  if (!Number.isFinite(total)) {
+    const tracks = json?.artisttracks?.track;
+    if (Array.isArray(tracks)) total = tracks.length;
+    else total = 0;
+  }
+  return total;
+}
   // Windowed via user.getArtistTracks; total is in @attr.total
   const url = lfUrl('user.getArtistTracks', {
     user: username,
