@@ -1,6 +1,7 @@
-
 import { useState, useMemo, useEffect } from 'react';
 import { getTop, normalize } from '../lib/lastfm';
+import Link from 'next/link';
+
 
 const TIMEFRAMES = ['7day', '1month', '12month', 'overall'];
 const CATEGORY_KEYS = ['track', 'album', 'artist'];
@@ -69,7 +70,7 @@ export default function Home() {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [status, lastAnswer, qIndex, questions]);
+  }, [, lastAnswer, qIndex, questions]);
 
   async function handleFetchAll(e) {
     e.preventDefault();
@@ -84,7 +85,7 @@ export default function Home() {
       return;
     }
 
-    setStatus('loading');
+    set('loading');
 
     try {
       const results = {};
@@ -124,11 +125,11 @@ export default function Home() {
       await Promise.all(new Array(CONCURRENCY).fill(0).map(worker));
 
       setData(results);
-      setStatus('ready');
+      set('ready');
     } catch (e) {
       console.error(e);
       setError('Something went wrong while fetching. Try a single known-good username first.');
-      setStatus('idle');
+      set('idle');
     }
   }
 
@@ -181,7 +182,7 @@ for (let i = 0; i < MAX_Q; i++) {
     setQIndex(0);
     setScore(0);
     setLastAnswer(null);
-    setStatus('playing');
+    set('playing');
   }
 
   function answer(choice) {
@@ -193,7 +194,7 @@ for (let i = 0; i < MAX_Q; i++) {
 
   function nextQ() {
     if (qIndex + 1 >= questions.length) {
-      setStatus('done');
+      set('done');
       return;
     }
     setQIndex(qIndex + 1);
@@ -201,7 +202,7 @@ for (let i = 0; i < MAX_Q; i++) {
   }
 
   function reset() {
-    setStatus('ready');
+    set('ready');
     setQuestions([]);
     setQIndex(0);
     setScore(0);
@@ -221,6 +222,9 @@ for (let i = 0; i < MAX_Q; i++) {
             <p className="small">Will fetch Top 10 tracks, albums, artists for: 7day, 1month, 12month, overall.</p>
             <button type="submit">Fetch Data</button>
           </form>
+          <div style={{ marginTop: 12 }}>
+          <Link href="/scoreboard"><button className="ghost">Artist Scoreboard</button></Link>
+          </div>
           {error && <p style={{color:'#d71e28', marginTop: 12}}>{error}</p>}
         </div>
       )}
