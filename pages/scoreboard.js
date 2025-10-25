@@ -278,36 +278,6 @@ export default function ScoreboardPage() {
     setLoadingBoard(false);
   }
 }
-      const results = (await runWithConcurrency(tasks, 4)).filter(Boolean);
-      const zero = [];
-      const nonZero = [];
-      for (let i = 0; i < results.length; i++) {
-        const r = results[i];
-        if ((r.count || 0) > 0) nonZero.push(r);
-        else zero.push(r.name);
-      }
-      nonZero.sort(function (a, b) { return b.count - a.count; });
-      setRows(nonZero);
-
-      // anyone missing => treat as zero
-      const everyone = {};
-      for (let i = 0; i < crowd.length; i++) everyone[crowd[i].name] = true;
-      const seen = {};
-      for (let i = 0; i < results.length; i++) seen[results[i].name] = true;
-      for (const name in everyone) if (!seen[name]) zero.push(name);
-
-      // unique + sorted
-      const uniq = {};
-      for (let i = 0; i < zero.length; i++) uniq[zero[i]] = true;
-      const zlist = Object.keys(uniq).sort(function (a, b) { return a.localeCompare(b); });
-      setMissing(zlist);
-    } catch (e) {
-      setError('Something went wrong while building the leaderboard.');
-    } finally {
-      setLoadingBoard(false);
-    }
-  }
-
   return (
     <div className="container">
       <h1>Artist Scoreboard</h1>
