@@ -82,6 +82,31 @@ async function getArtistUserPlaycount(username, artist) {
   const upc = stats && stats.userplaycount != null ? Number(stats.userplaycount) : 0;
   return upc;
 }
+// Rolling windows via user.getTopArtists (very reliable)
+async function getTopArtistPlaycount(username, artist, period) {
+  // period: '7day' | '1month' | '12month'
+  const url = lfUrl('user.getTopArtists', {
+    user: username,
+    period: period,
+    limit: 1000,   // large to improve odds the artist is included
+    page: 1
+  });
+  const json = await lfFetchJson(url);
+
+  const top = json && json.topartists ? json.topartists : null;
+  const arr = top && top.artist ? top.artist : [];
+  const target = (artist || '').trim().toLowerCase();
+
+  for (let i = 0; i < arr.length; i++) {
+    const a = arr[i] || {};
+    const name = (a.name || '').trim().toLowerCase();
+    if (name === target) {
+      // playcount is a string per API, convert to number
+      return Number(a.playcount || 0);
+    }
+  }
+  return 0; // not in top list → treat as 0
+}
 
 // Windowed count via user.getArtistTracks, using from/to
 async function getArtistTracksTotal(username, artist, start, end) {
@@ -194,12 +219,36 @@ export default function ScoreboardPage() {
     try {
       const win = windowFor(tf);
       const tasks = crowd.map(function (u) {
-        return async function () {
-          let count = 0;
-          try {
-            if (win) count = await getArtistTracksTotal(u.name, artist.trim(), win.start, win.end);
-            else count = await getArtistUserPlaycount(u.name, artist.trim());
-          } catch (e) {
+        
+        const tasks = crowd.map(function (u) {
+  return async function () {
+    let count = 0;
+    try {
+      // Decide which fetch strategy to use
+      if (!win) {
+        // All time → artist.getInfo (userplaycount)
+        count = await getArtistUserPlaycount(u.name, artist.trim());
+      } else {
+        // Rolling vs calendar
+        if (tf === '7d') {
+          count = await getTopArtistPlaycount(u.name, artist.trim(), '7day');
+        } else if (tf === '30d') {
+          count = await getTopArtistPlaycount(u.name, artist.trim(), '1month');
+        } else if (tf === '365d') {
+          count = await getTopArtistPlaycount(u.name, artist.trim(), '12month');
+        } else {
+          // Calendar windows (this month / this year) → from/to
+          count = await getArtistTracksTotal(u.name, artist.trim(), win.start, win.end);
+        }
+      }
+    } catch (e) {
+      count = 0;
+    }
+    return { name: u.name, avatar: u.avatar, count: count, link: artistLibLink(u.name, artist.trim(), tf) };
+  };
+});
+
+          catch (e) {
             count = 0;
           }
           return { name: u.name, avatar: u.avatar, count: count, link: artistLibLink(u.name, artist.trim(), tf) };
