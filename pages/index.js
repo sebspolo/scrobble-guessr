@@ -1,8 +1,10 @@
-import { useState, useMemo } from 'react';
+
+import { useState, useMemo, useEffect } from 'react';
 import { getTop, normalize } from '../lib/lastfm';
 
 const TIMEFRAMES = ['7day', '1month', '12month', 'overall'];
-const KINDS = ['tracks', 'albums', 'artists']; // maps to track/album/artist
+const CATEGORY_KEYS = ['track', 'album', 'artist'];
+const KINDS = ['tracks', 'albums', 'artists']; // fetch helpers
 
 function parseUsernames(input) {
   const arr = input.split(/\n|,|;/).map(s => s.trim()).filter(Boolean);
@@ -35,7 +37,39 @@ export default function Home() {
   const [score, setScore] = useState(0);
   const [lastAnswer, setLastAnswer] = useState(null);
 
+  // Filters (all checked by default)
+  const [tfChecked, setTfChecked] = useState({ '7day': true, '1month': true, '12month': true, 'overall': true });
+  const [catChecked, setCatChecked] = useState({ 'track': true, 'album': true, 'artist': true });
+
   const usernames = useMemo(() => parseUsernames(userInput), [userInput]);
+
+  // Hotkeys
+  useEffect(() => {
+    function onKey(e) {
+      if (e.repeat) return;
+      const key = e.key;
+      if (key === 'Enter') {
+        if (status === 'playing' && lastAnswer) {
+          nextQ();
+        } else if (status === 'done') {
+          reset();
+        } else if (status === 'ready') {
+          startGame();
+        }
+        return;
+      }
+      if (status === 'playing' && !lastAnswer) {
+        let idx = -1;
+        if (key >= '1' && key <= '9') idx = parseInt(key, 10) - 1;
+        else if (key === '0') idx = 9;
+        if (idx >= 0 && questions[qIndex] && idx < questions[qIndex].choices.length) {
+          answer(questions[qIndex].choices[idx]);
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [status, lastAnswer, qIndex, questions]);
 
   async function handleFetchAll(e) {
     e.preventDefault();
@@ -100,20 +134,25 @@ export default function Home() {
 
   function startGame() {
     if (!data) return;
+    const activeTFs = TIMEFRAMES.filter(tf => tfChecked[tf]);
+    const activeCats = CATEGORY_KEYS.filter(k => catChecked[k]);
+    if (activeTFs.length === 0) { alert('Select at least one timeframe.'); return; }
+    if (activeCats.length === 0) { alert('Select at least one media type.'); return; }
+
     const qs = [];
     const MAX_Q = 10;
 
     const combos = [];
     for (const user of usernames) {
-      for (const tf of TIMEFRAMES) {
-        for (const category of ['track', 'album', 'artist']) {
+      for (const tf of activeTFs) {
+        for (const category of activeCats) {
           const pool = data[user]?.[tf]?.[category] || [];
           if (pool.length > 0) combos.push({ user, tf, category });
         }
       }
     }
     if (combos.length === 0) {
-      alert('No data found for the provided usernames/timeframes. Try different usernames.');
+      alert('No data available for the selected filters. Try enabling more timeframes/types.');
       return;
     }
 
@@ -175,7 +214,7 @@ export default function Home() {
           <form onSubmit={handleFetchAll}>
             <label>Usernames</label>
             <textarea rows={6} placeholder={"alice\nbob\ncharlie"} value={userInput} onChange={e => setUserInput(e.target.value)} />
-            <p className="small">Timeframes: 7day, 1month, 12month, overall • Categories: track, album, artist • Top 10 each</p>
+            <p className="small">Will fetch Top 10 tracks, albums, artists for: 7day, 1month, 12month, overall.</p>
             <button type="submit">Fetch Data</button>
           </form>
           {error && <p style={{color:'#d71e28', marginTop: 12}}>{error}</p>}
@@ -192,7 +231,29 @@ export default function Home() {
       {status === 'ready' && (
         <div className="card">
           <h2>Data ready</h2>
-          <p className="small">Start the game. Questions are generated from the fetched data.</p>
+          <p className="small">Choose timeframes and media types to include, then press <strong>Start Game</strong>. (Enter key also starts.)</p>
+
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, margin:'12px 0'}}>
+            <div>
+              <h3 style={{margin:'4px 0'}}>Timeframes</h3>
+              {TIMEFRAMES.map(tf => (
+                <label key={tf} style={{fontWeight:'normal', display:'flex', alignItems:'center', gap:8}}>
+                  <input type="checkbox" checked={!!tfChecked[tf]} onChange={() => setTfChecked(prev => ({...prev, [tf]: !prev[tf]}))} />
+                  {tf}
+                </label>
+              ))}
+            </div>
+            <div>
+              <h3 style={{margin:'4px 0'}}>Media types</h3>
+              {CATEGORY_KEYS.map(cat => (
+                <label key={cat} style={{fontWeight:'normal', display:'flex', alignItems:'center', gap:8}}>
+                  <input type="checkbox" checked={!!(catChecked[cat])} onChange={() => setCatChecked(prev => ({...prev, [cat]: !prev[cat]}))} />
+                  {cat}
+                </label>
+              ))}
+            </div>
+          </div>
+
           <button onClick={startGame}>Start Game</button>
           <button className="ghost" style={{marginLeft:8}} onClick={() => setStatus('idle')}>Refetch</button>
         </div>
@@ -214,10 +275,13 @@ export default function Home() {
                 <strong>in {questions[qIndex].timeframe}?</strong>
               </p>
               <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
-                {questions[qIndex].choices.map((c) => (
-                  <button key={c} onClick={() => answer(c)} disabled={!!lastAnswer}>{c}</button>
+                {questions[qIndex].choices.map((c, i) => (
+                  <button key={c} onClick={() => answer(c)} disabled={!!lastAnswer}>
+                    {i < 9 ? (i+1) : 0}. {c}
+                  </button>
                 ))}
               </div>
+              <p className="small" style={{marginTop:8}}>Hotkeys: 1–9 (and 0 for 10th) to guess • Enter to continue</p>
               {lastAnswer && (
                 <div style={{marginTop:12}}>
                   {lastAnswer.correct ? (
@@ -238,6 +302,7 @@ export default function Home() {
           <h2>Results</h2>
           <p>You scored <strong>{score}</strong> / {questions.length}</p>
           <button onClick={reset}>Play Again</button>
+          <p className="small" style={{marginTop:8}}>Tip: Press Enter to return to Start Game, then Enter again to start.</p>
         </div>
       )}
     </div>
