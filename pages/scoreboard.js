@@ -218,27 +218,27 @@ export default function ScoreboardPage() {
     setLoadingBoard(true);
     try {
       const win = windowFor(tf);
-      const tasks = crowd.map(function (u) {
-        
-        const tasks = crowd.map(function (u) {
+     const tasks = crowd.map(function (u) {
   return async function () {
     let count = 0;
     try {
+      const a = artist.trim();
+
       // Decide which fetch strategy to use
       if (!win) {
         // All time → artist.getInfo (userplaycount)
-        count = await getArtistUserPlaycount(u.name, artist.trim());
+        count = await getArtistUserPlaycount(u.name, a);
       } else {
         // Rolling vs calendar
         if (tf === '7d') {
-          count = await getTopArtistPlaycount(u.name, artist.trim(), '7day');
+          count = await getTopArtistPlaycount(u.name, a, '7day');
         } else if (tf === '30d') {
-          count = await getTopArtistPlaycount(u.name, artist.trim(), '1month');
+          count = await getTopArtistPlaycount(u.name, a, '1month');
         } else if (tf === '365d') {
-          count = await getTopArtistPlaycount(u.name, artist.trim(), '12month');
+          count = await getTopArtistPlaycount(u.name, a, '12month');
         } else {
           // Calendar windows (this month / this year) → from/to
-          count = await getArtistTracksTotal(u.name, artist.trim(), win.start, win.end);
+          count = await getArtistTracksTotal(u.name, a, win.start, win.end);
         }
       }
     } catch (e) {
@@ -248,9 +248,8 @@ export default function ScoreboardPage() {
   };
 });
 
-          catch (e) {
-            count = 0;
-          }
+
+                              
           return { name: u.name, avatar: u.avatar, count: count, link: artistLibLink(u.name, artist.trim(), tf) };
         };
       });
