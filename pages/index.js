@@ -152,23 +152,30 @@ export default function Home() {
       }
     }
     if (combos.length === 0) {
-      alert('No data available for the selected filters. Try enabling more timeframes/types.');
-      return;
-    }
+  alert('No data available for the selected filters. Try enabling more timeframes/types.');
+  return;
+}
 
-    for (let i = 0; i < MAX_Q; i++) {
-      const pick = combos[Math.floor(Math.random() * combos.length)];
-      const pool = data[pick.user][pick.tf][pick.category];
-      const item = pool[Math.floor(Math.random() * pool.length)];
-      const X = item.playcount;
-      const Y = item;
-      const Z = pick.tf;
+for (let i = 0; i < MAX_Q; i++) {
+  const pick = combos[Math.floor(Math.random() * combos.length)];
+  const pool = data[pick.user][pick.tf][pick.category];
+  const item = pool[Math.floor(Math.random() * pool.length)];
+  const X = item.playcount;
+  const Y = item;
+  const Z = pick.tf;
 
-      const choices = [...usernames]; // keep original order, no shuffle
-      }
+  // keep original username order for buttons & hotkeys
+  const choices = [...usernames];
 
-      qs.push({ user: pick.user, category: pick.category, timeframe: Z, item: Y, scrobbles: X, choices });
-    }
+  qs.push({
+    user: pick.user,
+    category: pick.category,
+    timeframe: Z,
+    item: Y,
+    scrobbles: X,
+    choices
+  });
+}
 
     setQuestions(qs);
     setQIndex(0);
