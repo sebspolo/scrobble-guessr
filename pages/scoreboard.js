@@ -109,28 +109,49 @@ async function getTopArtistPlaycount(username, artist, period) {
 }
 
 // Windowed count via user.getArtistTracks, using from/to
+// Windowed count for calendar ranges. Try both param styles for reliability.
 async function getArtistTracksTotal(username, artist, start, end) {
-  const url = lfUrl('user.getArtistTracks', {
+  // helper: read "total" safely from a response
+  function extractTotal(json) {
+    var at = json && json.artisttracks ? json.artisttracks : null;
+    var attr = at && at['@attr'] ? at['@attr'] : null;
+    if (attr && attr.total != null) {
+      var t = Number(attr.total);
+      if (isFinite(t)) return t;
+    }
+    // Fallback: count items returned on this page
+    var tracks = at && at.track ? at.track : null;
+    if (Array.isArray(tracks)) return tracks.length;
+    return 0;
+  }
+
+  // attempt #1: from/to
+  var url1 = lfUrl('user.getArtistTracks', {
     user: username,
     artist: artist,
-    from: start,   // UNIX seconds (UTC)
-    to: end,       //   "
+    from: start,
+    to: end,
     limit: 1,
     page: 1
   });
-  const json = await lfFetchJson(url);
+  var json1 = await lfFetchJson(url1);
+  var total1 = extractTotal(json1);
 
-  let total = NaN;
-  const at = json && json.artisttracks ? json.artisttracks : null;
-  const attr = at && at['@attr'] ? at['@attr'] : null;
-  if (attr && attr.total != null) total = Number(attr.total);
+  if (total1 > 0) return total1;
 
-  if (!isFinite(total)) {
-    const tracks = at && at.track ? at.track : null;
-    if (Array.isArray(tracks)) total = tracks.length;
-    else total = 0;
-  }
-  return total;
+  // attempt #2: startTimestamp/endTimestamp
+  var url2 = lfUrl('user.getArtistTracks', {
+    user: username,
+    artist: artist,
+    startTimestamp: start,
+    endTimestamp: end,
+    limit: 1,
+    page: 1
+  });
+  var json2 = await lfFetchJson(url2);
+  var total2 = extractTotal(json2);
+
+  return total2; // may be 0 if nothing found
 }
 
 // Build last.fm link (avoid URL constructor)
