@@ -210,50 +210,74 @@ export default function ScoreboardPage() {
   }
 
   async function handleBuild() {
-    setError('');
-    if (!artist || !artist.trim()) { setError('Enter an artist name.'); return; }
-    if (!owner || !owner.trim()) { setError('Enter your Last.fm username and load friends first.'); return; }
-    if (crowd.length === 0) { setError('No users to compare.'); return; }
+  setError('');
+  if (!artist || !artist.trim()) { setError('Enter an artist name.'); return; }
+  if (!owner || !owner.trim()) { setError('Enter your Last.fm username and load friends first.'); return; }
+  if (crowd.length === 0) { setError('No users to compare.'); return; }
 
-    setLoadingBoard(true);
-    try {
-      const win = windowFor(tf);
-     const tasks = crowd.map(function (u) {
-  return async function () {
-    let count = 0;
-    try {
-      const a = artist.trim();
+  setLoadingBoard(true);
+  try {
+    const win = windowFor(tf);
+    const a = artist.trim();
 
-      // Decide which fetch strategy to use
-      if (!win) {
-        // All time → artist.getInfo (userplaycount)
-        count = await getArtistUserPlaycount(u.name, a);
-      } else {
-        // Rolling vs calendar
-        if (tf === '7d') {
-          count = await getTopArtistPlaycount(u.name, a, '7day');
-        } else if (tf === '30d') {
-          count = await getTopArtistPlaycount(u.name, a, '1month');
-        } else if (tf === '365d') {
-          count = await getTopArtistPlaycount(u.name, a, '12month');
-        } else {
-          // Calendar windows (this month / this year) → from/to
-          count = await getArtistTracksTotal(u.name, a, win.start, win.end);
+    const tasks = crowd.map(function (u) {
+      return async function () {
+        let count = 0;
+        try {
+          // Decide which fetch strategy to use
+          if (!win) {
+            // All time → artist.getInfo (userplaycount)
+            count = await getArtistUserPlaycount(u.name, a);
+          } else {
+            // Rolling vs calendar
+            if (tf === '7d') {
+              count = await getTopArtistPlaycount(u.name, a, '7day');
+            } else if (tf === '30d') {
+              count = await getTopArtistPlaycount(u.name, a, '1month');
+            } else if (tf === '365d') {
+              count = await getTopArtistPlaycount(u.name, a, '12month');
+            } else {
+              // Calendar windows (this month / this year) → from/to
+              count = await getArtistTracksTotal(u.name, a, win.start, win.end);
+            }
+          }
+        } catch (e) {
+          count = 0;
         }
-      }
-    } catch (e) {
-      count = 0;
+        return { name: u.name, avatar: u.avatar, count: count, link: artistLibLink(u.name, a, tf) };
+      };
+    });
+
+    const results = (await runWithConcurrency(tasks, 4)).filter(Boolean);
+
+    const zero = [];
+    const nonZero = [];
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      if ((r.count || 0) > 0) nonZero.push(r);
+      else zero.push(r.name);
     }
-    return { name: u.name, avatar: u.avatar, count: count, link: artistLibLink(u.name, artist.trim(), tf) };
-  };
-});
+    nonZero.sort(function (a, b) { return b.count - a.count; });
+    setRows(nonZero);
 
+    // anyone missing => treat as zero
+    const everyone = {};
+    for (let i = 0; i < crowd.length; i++) everyone[crowd[i].name] = true;
+    const seen = {};
+    for (let i = 0; i < results.length; i++) seen[results[i].name] = true;
+    for (const name in everyone) if (!seen[name]) zero.push(name);
 
-                              
-          return { name: u.name, avatar: u.avatar, count: count, link: artistLibLink(u.name, artist.trim(), tf) };
-        };
-      });
-
+    // unique + sorted
+    const uniq = {};
+    for (let i = 0; i < zero.length; i++) uniq[zero[i]] = true;
+    const zlist = Object.keys(uniq).sort(function (a, b) { return a.localeCompare(b); });
+    setMissing(zlist);
+  } catch (e) {
+    setError('Something went wrong while building the leaderboard.');
+  } finally {
+    setLoadingBoard(false);
+  }
+}
       const results = (await runWithConcurrency(tasks, 4)).filter(Boolean);
       const zero = [];
       const nonZero = [];
