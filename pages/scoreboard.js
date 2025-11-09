@@ -11,6 +11,9 @@ const TF = [
   { key: 'this_year', label: 'This year (calendar)' },
 ];
 
+const DEFAULT_AVATAR =
+  'https://lastfm.freetls.fastly.net/i/u/avatar170s/2a96cbd8b46e442fc41c2b86b821562f.png';
+
 // ---------- time helpers (UTC) ----------
 function startOfThisMonthUTC(d) {
   if (!d) d = new Date();
@@ -343,29 +346,45 @@ export default function ScoreboardPage() {
         {error ? <p style={{color:'#d71e28', marginTop:12}}>{error}</p> : null}
 
         {rows.length > 0 ? (
-          <div style={{marginTop:16}}>
-            <h3>Leaderboard</h3>
-            <ol style={{paddingLeft:18}}>
-              {rows.map(function (r, idx) {
-                const widthPct = Math.max(4, Math.min(100, (r.count / (rows[0] ? rows[0].count : 1)) * 100));
-                return (
-                  <li key={r.name} style={{marginBottom:8}}>
-                    <div style={{display:'flex', alignItems:'center', gap:8}}>
-                      <span style={{width:18, display:'inline-block'}}>{idx+1}</span>
-                      <img src={r.avatar || 'https://lastfm.freetls.fastly.net/i/u/avatar170s/'} alt="" width="24" height="24" style={{borderRadius:999}} />
-                      <strong style={{minWidth:140}}>{r.name}</strong>
-                      <a href={r.link} target="_blank" rel="noreferrer"
-                        style={{flex:1, height:14, background:'#f5d6d6', borderRadius:6, position:'relative', display:'inline-block', textDecoration:'none'}}>
-                        <span style={{position:'absolute', left:0, top:0, bottom:0, width: widthPct + '%', background:'#d71e28', borderRadius:6}} />
-                      </a>
-                      <span style={{width:56, textAlign:'right'}}>{r.count}</span>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
-        ) : null}
+  <div style={{marginTop:16}}>
+    <h3>Leaderboard</h3>
+    <ol className="leader">
+      {rows.map(function (r, idx) {
+        const top = rows[0] ? Math.max(1, rows[0].count) : 1;
+        const widthPct = Math.max(4, Math.min(100, (r.count / top) * 100));
+        const barStyle = { width: widthPct + '%' };
+
+        return (
+          <li key={r.name}>
+            <div className="row">
+              <span className="rank">{idx + 1}</span>
+
+              <img
+                className="avatar"
+                src={r.avatar || DEFAULT_AVATAR}
+                alt=""
+                onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR; }}
+              />
+
+              <span className="name">{r.name}</span>
+
+              <a className="barWrap" href={r.link} target="_blank" rel="noreferrer">
+                <span className="barFill" style={barStyle}>
+                  {/* number INSIDE the red bar */}
+                  {r.count}
+                </span>
+              </a>
+
+              {/* keep a trailing number if you like, or remove this span */}
+              {/* <span className="trailingCount">{r.count}</span> */}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  </div>
+) : null}
+
 
         {rows.length === 0 && !loadingBoard && friends.length > 0 && artist ? (
           <p className="small" style={{marginTop:12}}>No scrobbles found for this artist and timeframe.</p>
