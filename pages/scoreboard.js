@@ -11,6 +11,12 @@ const TF = [
   { key: 'this_year', label: 'This year (calendar)' },
 ];
 
+const TYPES = [
+  { key: 'artist', label: 'Artist' },
+  { key: 'album',  label: 'Album' },
+  { key: 'track',  label: 'Track' },
+];
+
 const DEFAULT_AVATAR =
   'https://lastfm.freetls.fastly.net/i/u/avatar170s/2a96cbd8b46e442fc41c2b86b821562f.png';
 
@@ -110,6 +116,58 @@ async function getTopArtistPlaycount(username, artist, period) {
   }
   return 0; // not in top list → treat as 0
 }
+// ---- Album: all-time via album.getInfo ----
+async function getAlbumUserPlaycount(username, artist, album) {
+  const url = lfUrl('album.getInfo', { artist: artist, album: album, username: username });
+  const json = await lfFetchJson(url);
+  const alb = json && json.album ? json.album : null;
+  const upc = alb && alb.userplaycount != null ? Number(alb.userplaycount) : 0;
+  return upc;
+}
+
+// ---- Track: all-time via track.getInfo ----
+async function getTrackUserPlaycount(username, artist, track) {
+  const url = lfUrl('track.getInfo', { artist: artist, track: track, username: username });
+  const json = await lfFetchJson(url);
+  const trk = json && json.track ? json.track : null;
+  const upc = trk && trk.userplaycount != null ? Number(trk.userplaycount) : 0;
+  return upc;
+}
+
+// ---- Album: rolling via user.getTopAlbums ----
+async function getTopAlbumPlaycount(username, artist, album, period) {
+  const url = lfUrl('user.getTopAlbums', { user: username, period: period, limit: 1000, page: 1 });
+  const json = await lfFetchJson(url);
+  const top = json && json.topalbums ? json.topalbums : null;
+  const arr = top && top.album ? top.album : [];
+  const aName = (artist || '').trim().toLowerCase();
+  const alName = (album  || '').trim().toLowerCase();
+  for (let i = 0; i < arr.length; i++) {
+    const a = arr[i] || {};
+    const an = (a.artist && a.artist.name ? a.artist.name : '').trim().toLowerCase();
+    const nm = (a.name || '').trim().toLowerCase();
+    if (an === aName && nm === alName) return Number(a.playcount || 0);
+  }
+  return 0;
+}
+
+// ---- Track: rolling via user.getTopTracks ----
+async function getTopTrackPlaycount(username, artist, track, period) {
+  const url = lfUrl('user.getTopTracks', { user: username, period: period, limit: 1000, page: 1 });
+  const json = await lfFetchJson(url);
+  const top = json && json.toptracks ? json.toptracks : null;
+  const arr = top && top.track ? top.track : [];
+  const aName = (artist || '').trim().toLowerCase();
+  const tName = (track  || '').trim().toLowerCase();
+  for (let i = 0; i < arr.length; i++) {
+    const t = arr[i] || {};
+    const an = (t.artist && t.artist.name ? t.artist.name : '').trim().toLowerCase();
+    const nm = (t.name || '').trim().toLowerCase();
+    if (an === aName && nm === tName) return Number(t.playcount || 0);
+  }
+  return 0;
+}
+
 
 // Windowed count via user.getArtistTracks, using from/to
 // Windowed count for calendar ranges. Try both param styles for reliability.
@@ -194,7 +252,10 @@ async function runWithConcurrency(tasks, n) {
 export default function ScoreboardPage() {
   const [owner, setOwner] = useState('');
   const [friends, setFriends] = useState([]);
-  const [artist, setArtist] = useState('');
+  const [kind, setKind] = useState('artist');   // artist | album | track
+const [artist, setArtist] = useState('');     // used for all three
+const [album, setAlbum]   = useState('');     // only when kind === 'album'
+const [track, setTrack]   = useState('');     // only when kind === 'track'
   const [tf, setTf] = useState('all');
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [loadingBoard, setLoadingBoard] = useState(false);
@@ -238,6 +299,10 @@ export default function ScoreboardPage() {
   if (!artist || !artist.trim()) { setError('Enter an artist name.'); return; }
   if (!owner || !owner.trim()) { setError('Enter your Last.fm username and load friends first.'); return; }
   if (crowd.length === 0) { setError('No users to compare.'); return; }
+if ((tf === 'this_month' || tf === 'this_year') && kind !== 'artist') {
+  setError('“This month/year” is currently supported for artists. Use All time or 7d/30d/365d for album/track.');
+  return;
+}
 
   setLoadingBoard(true);
   try {
@@ -245,32 +310,85 @@ export default function ScoreboardPage() {
     const a = artist.trim();
 
     const tasks = crowd.map(function (u) {
-      return async function () {
-        let count = 0;
-        try {
-          // Decide which fetch strategy to use
-          if (!win) {
-            // All time → artist.getInfo (userplaycount)
-            count = await getArtistUserPlaycount(u.name, a);
-          } else {
-            // Rolling vs calendar
-            if (tf === '7d') {
-              count = await getTopArtistPlaycount(u.name, a, '7day');
-            } else if (tf === '30d') {
-              count = await getTopArtistPlaycount(u.name, a, '1month');
-            } else if (tf === '365d') {
-              count = await getTopArtistPlaycount(u.name, a, '12month');
-            } else {
-              // Calendar windows (this month / this year) → from/to
-              count = await getArtistTracksTotal(u.name, a, win.start, win.end);
-            }
-          }
-        } catch (e) {
+  return async function () {
+    let count = 0;
+    try {
+      const A  = (artist || '').trim();
+      const Al = (album  || '').trim();
+      const T  = (track  || '').trim();
+
+      const isAll      = (tf === 'all');
+      const isRolling  = (tf === '7d' || tf === '30d' || tf === '365d');
+      const isCalendar = (tf === 'this_month' || tf === 'this_year');
+
+      if (kind === 'artist') {
+        if (isAll) {
+          count = await getArtistUserPlaycount(u.name, A);
+        } else if (isRolling) {
+          const period = (tf === '7d') ? '7day' : (tf === '30d') ? '1month' : '12month';
+          count = await getTopArtistPlaycount(u.name, A, period);
+        } else {
+          // calendar → artist only
+          const w = windowFor(tf);
+          count = await getArtistTracksTotal(u.name, A, w.start, w.end);
+        }
+      } else if (kind === 'album') {
+        if (isAll) {
+          count = await getAlbumUserPlaycount(u.name, A, Al);
+        } else if (isRolling) {
+          const period = (tf === '7d') ? '7day' : (tf === '30d') ? '1month' : '12month';
+          count = await getTopAlbumPlaycount(u.name, A, Al, period);
+        } else {
+          // calendar for album not yet implemented
           count = 0;
         }
-        return { name: u.name, avatar: u.avatar, count: count, link: artistLibLink(u.name, a, tf) };
-      };
-    });
+      } else if (kind === 'track') {
+        if (isAll) {
+          count = await getTrackUserPlaycount(u.name, A, T);
+        } else if (isRolling) {
+          const period = (tf === '7d') ? '7day' : (tf === '30d') ? '1month' : '12month';
+          count = await getTopTrackPlaycount(u.name, A, T, period);
+        } else {
+          // calendar for track not yet implemented
+          count = 0;
+        }
+      }
+    } catch (e) {
+      count = 0;
+    }
+
+    // Build the correct link per type
+    const link = (function () {
+      if (kind === 'artist') return artistLibLink(u.name, (artist || '').trim(), tf);
+
+      if (kind === 'album') {
+        const base =
+          'https://www.last.fm/user/' +
+          encodeURIComponent(u.name) + '/library/music/' +
+          encodeURIComponent((artist || '').trim()) + '/' +
+          encodeURIComponent((album || '').trim());
+        const w = windowFor(tf);
+        if (!w || tf === '7d' || tf === '30d' || tf === '365d') return base;
+        return base + '?from=' + encodeURIComponent(ymd(w.start)) + '&to=' + encodeURIComponent(ymd(w.end));
+      }
+
+      if (kind === 'track') {
+        const base =
+          'https://www.last.fm/user/' +
+          encodeURIComponent(u.name) + '/library/music/' +
+          encodeURIComponent((artist || '').trim()) + '/_/' +
+          encodeURIComponent((track || '').trim());
+        const w = windowFor(tf);
+        if (!w || tf === '7d' || tf === '30d' || tf === '365d') return base;
+        return base + '?from=' + encodeURIComponent(ymd(w.start)) + '&to=' + encodeURIComponent(ymd(w.end));
+      }
+
+      return '#';
+    })();
+
+    return { name: u.name, avatar: u.avatar, count, link };
+  };
+});
 
     const results = (await runWithConcurrency(tasks, 4)).filter(Boolean);
 
@@ -324,23 +442,88 @@ export default function ScoreboardPage() {
       </div>
 
       <div className="card">
-        <div style={{display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:8}}>
-          <div>
-            <label>Artist</label>
-            <input type="text" placeholder="Taylor Swift" value={artist}
-                   onChange={function (e) { setArtist(e.target.value); }} />
-          </div>
-          <div>
-            <label>Timeframe</label>
-            <select value={tf} onChange={function (e) { setTf(e.target.value); }}>
-              {TF.map(function (t) { return <option key={t.key} value={t.key}>{t.label}</option>; })}
-            </select>
-          </div>
-          <div style={{display:'flex', alignItems:'end'}}>
-            <button onClick={handleBuild} disabled={loadingBoard || !owner || !artist}>
-              {loadingBoard ? 'Building…' : 'Build Leaderboard'}
-            </button>
-          </div>
+     <div style={{display:'grid', gridTemplateColumns:'1fr 2fr 1fr 1fr', gap:8}}>
+  <div>
+    <label>Type</label>
+    <select value={kind} onChange={e => setKind(e.target.value)}>
+      {TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+    </select>
+  </div>
+
+  <div>
+    {kind === 'artist' && (
+      <>
+        <label>Artist</label>
+        <input
+          type="text"
+          placeholder="Taylor Swift"
+          value={artist}
+          onChange={e => setArtist(e.target.value)}
+        />
+      </>
+    )}
+    {kind === 'album' && (
+      <>
+        <label>Album (and Artist)</label>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8}}>
+          <input
+            type="text"
+            placeholder="Artist e.g., Taylor Swift"
+            value={artist}
+            onChange={e => setArtist(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Album e.g., 1989 (Taylor’s Version)"
+            value={album}
+            onChange={e => setAlbum(e.target.value)}
+          />
+        </div>
+      </>
+    )}
+    {kind === 'track' && (
+      <>
+        <label>Track (and Artist)</label>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8}}>
+          <input
+            type="text"
+            placeholder="Artist e.g., Taylor Swift"
+            value={artist}
+            onChange={e => setArtist(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Track e.g., Cruel Summer"
+            value={track}
+            onChange={e => setTrack(e.target.value)}
+          />
+        </div>
+      </>
+    )}
+  </div>
+
+  <div>
+    <label>Timeframe</label>
+    <select value={tf} onChange={e => setTf(e.target.value)}>
+      {TF.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+    </select>
+  </div>
+
+  <div style={{display:'flex', alignItems:'end'}}>
+    <button
+      onClick={handleBuild}
+      disabled={
+        loadingBoard ||
+        !owner ||
+        (kind === 'artist' && !artist) ||
+        (kind === 'album'  && (!artist || !album)) ||
+        (kind === 'track'  && (!artist || !track))
+      }>
+      {loadingBoard ? 'Building…' : 'Build Leaderboard'}
+    </button>
+  </div>
+</div>
+
         </div>
 
         {error ? <p style={{color:'#d71e28', marginTop:12}}>{error}</p> : null}
