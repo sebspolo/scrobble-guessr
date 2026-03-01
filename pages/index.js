@@ -85,7 +85,7 @@ export default function Home() {
       return;
     }
 
-    set('loading');
+    setStatus('loading');
 
     try {
       const results = {};
@@ -125,11 +125,11 @@ export default function Home() {
       await Promise.all(new Array(CONCURRENCY).fill(0).map(worker));
 
       setData(results);
-      set('ready');
+      setStatus('ready');
     } catch (e) {
       console.error(e);
       setError('Something went wrong while fetching. Try a single known-good username first.');
-      set('idle');
+      setStatus('idle');
     }
   }
 
@@ -182,7 +182,7 @@ for (let i = 0; i < MAX_Q; i++) {
     setQIndex(0);
     setScore(0);
     setLastAnswer(null);
-    set('playing');
+    setStatus('playing');
   }
 
   function answer(choice) {
@@ -194,7 +194,7 @@ for (let i = 0; i < MAX_Q; i++) {
 
   function nextQ() {
     if (qIndex + 1 >= questions.length) {
-      set('done');
+      setStatus('done');
       return;
     }
     setQIndex(qIndex + 1);
@@ -202,7 +202,7 @@ for (let i = 0; i < MAX_Q; i++) {
   }
 
   function reset() {
-    set('ready');
+    setStatus('ready');
     setQuestions([]);
     setQIndex(0);
     setScore(0);
