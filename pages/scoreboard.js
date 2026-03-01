@@ -268,6 +268,14 @@ export default function ScoreboardPage() {
     try {
       const list = await getFriends(owner.trim());
       setFriends(list);
+
+      // Save for Friends Leaderboard page
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(
+          "sg_friends_payload",
+          JSON.stringify({ owner: owner.trim(), friends: list, ts: Date.now() })
+        );
+      }
     } catch (e) {
       setError('Failed to load friends. Check the username and try again.');
     } finally {
@@ -559,6 +567,13 @@ export default function ScoreboardPage() {
         ) : null}
       </div>
     </div>
+{friends.length > 0 ? (
+  <div style={{ marginTop: 20, opacity: 0.85 }}>
+    <Link href="/friends-leaderboard">
+      Or click here to see Friends Leaderboard
+    </Link>
+  </div>
+) : null}
   );
 }
 
