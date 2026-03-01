@@ -566,14 +566,14 @@ export default function ScoreboardPage() {
           </div>
         ) : null}
       </div>
-    </div>
-{friends.length > 0 ? (
+          {friends.length > 0 ? (
   <div style={{ marginTop: 20, opacity: 0.85 }}>
     <Link href="/friends-leaderboard">
       Or click here to see Friends Leaderboard
     </Link>
   </div>
 ) : null}
+    </div>
   );
 }
 
