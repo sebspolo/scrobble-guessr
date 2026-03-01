@@ -160,12 +160,10 @@ export default function FriendsLeaderboardPage() {
         // 2) library totals (unique)
         // These method names are the standard Last.fm library endpoints.
         // If albums/tracks totals ever come back 0 due to API behavior, we’ll still render safely.
-        const [artists, albums, tracks] = await Promise.all([
-          fetchLibraryTotal(username, "library.getArtists"),
-          fetchLibraryTotal(username, "library.getAlbums"),
-          fetchLibraryTotal(username, "library.getTracks"),
-        ]);
-
+       let artists = 0, albums = 0, tracks = 0;
+        try { artists = await fetchLibraryTotal(username, "library.getArtists"); } catch (e) { artists = 0; }
+        try { albums  = await fetchLibraryTotal(username, "library.getAlbums");  } catch (e) { albums  = 0; }
+        try { tracks  = await fetchLibraryTotal(username, "library.getTracks");  } catch (e) { tracks  = 0; }
         return {
           name: username,
           avatar,
